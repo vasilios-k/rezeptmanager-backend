@@ -1,87 +1,146 @@
 package de.htwberlin.rezeptmanager_backend.service;
 
+import de.htwberlin.rezeptmanager_backend.dto.request.CreateRecipeIngredientRequest;
+import de.htwberlin.rezeptmanager_backend.dto.request.CreateRecipeRequest;
+import de.htwberlin.rezeptmanager_backend.dto.response.IngredientResponse;
+import de.htwberlin.rezeptmanager_backend.dto.response.RecipeIngredientResponse;
+import de.htwberlin.rezeptmanager_backend.dto.response.RecipeResponse;
 import de.htwberlin.rezeptmanager_backend.model.Ingredient;
 import de.htwberlin.rezeptmanager_backend.model.Recipe;
-import de.htwberlin.rezeptmanager_backend.model.RecipeIngredient;
-import de.htwberlin.rezeptmanager_backend.model.Unit;
+import de.htwberlin.rezeptmanager_backend.repository.IngredientRepository;
+import de.htwberlin.rezeptmanager_backend.repository.RecipeRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
-import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 @Service
 public class RecipeService {
 
-    private final List<Recipe> recipes;
+    private final RecipeRepository recipeRepository;
+    private final IngredientRepository ingredientRepository;
 
-    public RecipeService() {
-        Ingredient flour = new Ingredient(1L, "Mehl");
-        Ingredient eggs = new Ingredient(2L, "Eier");
-        Ingredient milk = new Ingredient(3L, "Milch");
-        Ingredient water = new Ingredient(4L, "Wasser");
-        Ingredient dryYeast = new Ingredient(5L, "Trockenhefe");
-        Ingredient salt = new Ingredient(6L, "Salz");
-
-        recipes = List.of(
-                new Recipe(
-                        1L,
-                        "Pfannkuchen",
-                        List.of(
-                                new RecipeIngredient(
-                                        flour,
-                                        new BigDecimal("200"),
-                                        Unit.GRAM
-                                ),
-                                new RecipeIngredient(
-                                        eggs,
-                                        new BigDecimal("2"),
-                                        Unit.PIECE
-                                ),
-                                new RecipeIngredient(
-                                        milk,
-                                        new BigDecimal("300"),
-                                        Unit.MILLILITER
-                                )
-                        ),
-                        "Zutaten verrühren und portionsweise "
-                                + "in einer Pfanne ausbacken.",
-                        25,
-                        2
-                ),
-                new Recipe(
-                        2L,
-                        "Brot",
-                        List.of(
-                                new RecipeIngredient(
-                                        flour,
-                                        new BigDecimal("500"),
-                                        Unit.GRAM
-                                ),
-                                new RecipeIngredient(
-                                        water,
-                                        new BigDecimal("300"),
-                                        Unit.MILLILITER
-                                ),
-                                new RecipeIngredient(
-                                        dryYeast,
-                                        new BigDecimal("7"),
-                                        Unit.GRAM
-                                ),
-                                new RecipeIngredient(
-                                        salt,
-                                        new BigDecimal("1"),
-                                        Unit.TEASPOON
-                                )
-                        ),
-                        "Zutaten verkneten. Den Teig gehen lassen, "
-                                + "einen Laib formen und im Ofen backen.",
-                        90,
-                        4
-                )
-        );
+    public RecipeService(
+            RecipeRepository recipeRepository,
+            IngredientRepository ingredientRepository
+    ) {
+        this.recipeRepository = recipeRepository;
+        this.ingredientRepository = ingredientRepository;
     }
 
-    public List<Recipe> getRecipes() {
-        return recipes;
+    @Transactional(readOnly = true)
+    public List<RecipeResponse> getRecipes() {
+        return recipeRepository.findAllByOrderByIdAsc()
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public RecipeResponse getRecipe(Long id) {
+        Recipe recipe = recipeRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Rezept nicht gefunden."
+                ));
+
+        return toResponse(recipe);
+    }
+
+    @Transactional
+    public RecipeResponse createRecipe(CreateRecipeRequest request) {
+        validateIngredientNames(request);
+
+        Recipe recipe = new Recipe(
+                request.title().strip(),
+                request.instructions().strip(),
+                request.prepTimeMinutes(),
+                request.servings()
+        );
+
+        for (CreateRecipeIngredientRequest item : request.ingredients()) {
+            Ingredient ingredient = findOrCreateIngredient(
+                    item.ingredientName()
+            );
+
+            recipe.addIngredient(
+                    ingredient,
+                    item.quantity(),
+                    item.unit()
+            );
+        }
+
+        Recipe savedRecipe = recipeRepository.saveAndFlush(recipe);
+        return toResponse(savedRecipe);
+    }
+
+    private void validateIngredientNames(CreateRecipeRequest request) {
+        Set<String> names = new HashSet<>();
+
+        for (CreateRecipeIngredientRequest item : request.ingredients()) {
+            String normalizedName = normalizeIngredientName(
+                    item.ingredientName()
+            );
+
+            if (!names.add(normalizedName)) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Bitte jede Zutat nur einmal pro Rezept angeben."
+                );
+            }
+        }
+    }
+
+    private Ingredient findOrCreateIngredient(String ingredientName) {
+        String name = ingredientName.strip().replaceAll("\\s+", " ");
+        String normalizedName = normalizeIngredientName(name);
+
+        return ingredientRepository.findByNormalizedName(normalizedName)
+                .orElseGet(() -> {
+                    ingredientRepository.insertIfAbsent(
+                            name,
+                            normalizedName
+                    );
+
+                    return ingredientRepository
+                            .findByNormalizedName(normalizedName)
+                            .orElseThrow(() -> new IllegalStateException(
+                                    "Die Zutat konnte nicht geladen werden."
+                            ));
+                });
+    }
+
+    private String normalizeIngredientName(String name) {
+        return name.strip()
+                .replaceAll("\\s+", " ")
+                .toLowerCase(Locale.ROOT);
+    }
+
+    private RecipeResponse toResponse(Recipe recipe) {
+        List<RecipeIngredientResponse> ingredients = recipe.getIngredients()
+                .stream()
+                .map(item -> new RecipeIngredientResponse(
+                        new IngredientResponse(
+                                item.getIngredient().getId(),
+                                item.getIngredient().getName()
+                        ),
+                        item.getQuantity(),
+                        item.getUnit()
+                ))
+                .toList();
+
+        return new RecipeResponse(
+                recipe.getId(),
+                recipe.getTitle(),
+                ingredients,
+                recipe.getInstructions(),
+                recipe.getPrepTimeMinutes(),
+                recipe.getServings()
+        );
     }
 }

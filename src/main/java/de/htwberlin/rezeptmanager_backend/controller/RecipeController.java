@@ -1,11 +1,18 @@
 package de.htwberlin.rezeptmanager_backend.controller;
 
-import de.htwberlin.rezeptmanager_backend.model.Recipe;
+import de.htwberlin.rezeptmanager_backend.dto.request.CreateRecipeRequest;
+import de.htwberlin.rezeptmanager_backend.dto.response.RecipeResponse;
 import de.htwberlin.rezeptmanager_backend.service.RecipeService;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.URI;
 import java.util.List;
 
 @RestController
@@ -19,7 +26,23 @@ public class RecipeController {
     }
 
     @GetMapping
-    public List<Recipe> getRecipes() {
+    public List<RecipeResponse> getRecipes() {
         return recipeService.getRecipes();
+    }
+
+    @GetMapping("/{id}")
+    public RecipeResponse getRecipe(@PathVariable("id") Long id) {
+        return recipeService.getRecipe(id);
+    }
+
+    @PostMapping
+    public ResponseEntity<RecipeResponse> createRecipe(
+            @Valid @RequestBody CreateRecipeRequest request
+    ) {
+        RecipeResponse recipe = recipeService.createRecipe(request);
+
+        return ResponseEntity
+                .created(URI.create("/api/recipes/" + recipe.id()))
+                .body(recipe);
     }
 }
