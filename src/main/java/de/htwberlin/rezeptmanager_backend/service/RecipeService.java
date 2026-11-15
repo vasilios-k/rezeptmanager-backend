@@ -90,6 +90,14 @@ public class RecipeService {
         return toResponse(recipe);
     }
 
+    @Transactional
+    public void deleteRecipe(Long id) {
+        Recipe recipe = findRecipe(id);
+
+        recipeRepository.delete(recipe);
+        recipeRepository.flush();
+    }
+
     private Recipe findRecipe(Long id) {
         return recipeRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
