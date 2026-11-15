@@ -10,7 +10,7 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-public record CreateRecipeRequest(
+public record RecipeRequest(
 
         @NotBlank
         @Size(max = 200)
@@ -18,7 +18,7 @@ public record CreateRecipeRequest(
 
         @NotEmpty
         @Size(max = 100)
-        List<@NotNull @Valid CreateRecipeIngredientRequest> ingredients,
+        List<@NotNull @Valid RecipeIngredientRequest> ingredients,
 
         @NotBlank
         @Size(max = 10000)

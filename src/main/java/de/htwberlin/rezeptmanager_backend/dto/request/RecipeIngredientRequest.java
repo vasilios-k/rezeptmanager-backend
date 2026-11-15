@@ -9,7 +9,7 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 
-public record CreateRecipeIngredientRequest(
+public record RecipeIngredientRequest(
 
         @NotBlank
         @Size(max = 100)

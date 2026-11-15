@@ -59,6 +59,11 @@ public class RecipeIngredient {
         this.unit = unit;
     }
 
+    public void updateAmount(BigDecimal quantity, Unit unit) {
+        this.quantity = quantity;
+        this.unit = unit;
+    }
+
     public Long getId() {
         return id;
     }

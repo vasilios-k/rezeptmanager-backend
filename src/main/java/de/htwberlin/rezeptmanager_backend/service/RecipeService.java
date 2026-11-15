@@ -1,12 +1,13 @@
 package de.htwberlin.rezeptmanager_backend.service;
 
-import de.htwberlin.rezeptmanager_backend.dto.request.CreateRecipeIngredientRequest;
-import de.htwberlin.rezeptmanager_backend.dto.request.CreateRecipeRequest;
+import de.htwberlin.rezeptmanager_backend.dto.request.RecipeIngredientRequest;
+import de.htwberlin.rezeptmanager_backend.dto.request.RecipeRequest;
 import de.htwberlin.rezeptmanager_backend.dto.response.IngredientResponse;
 import de.htwberlin.rezeptmanager_backend.dto.response.RecipeIngredientResponse;
 import de.htwberlin.rezeptmanager_backend.dto.response.RecipeResponse;
 import de.htwberlin.rezeptmanager_backend.model.Ingredient;
 import de.htwberlin.rezeptmanager_backend.model.Recipe;
+import de.htwberlin.rezeptmanager_backend.model.RecipeIngredient;
 import de.htwberlin.rezeptmanager_backend.repository.IngredientRepository;
 import de.htwberlin.rezeptmanager_backend.repository.RecipeRepository;
 import org.springframework.http.HttpStatus;
@@ -14,9 +15,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -43,17 +47,11 @@ public class RecipeService {
 
     @Transactional(readOnly = true)
     public RecipeResponse getRecipe(Long id) {
-        Recipe recipe = recipeRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Rezept nicht gefunden."
-                ));
-
-        return toResponse(recipe);
+        return toResponse(findRecipe(id));
     }
 
     @Transactional
-    public RecipeResponse createRecipe(CreateRecipeRequest request) {
+    public RecipeResponse createRecipe(RecipeRequest request) {
         validateIngredientNames(request);
 
         Recipe recipe = new Recipe(
@@ -63,26 +61,91 @@ public class RecipeService {
                 request.servings()
         );
 
-        for (CreateRecipeIngredientRequest item : request.ingredients()) {
-            Ingredient ingredient = findOrCreateIngredient(
-                    item.ingredientName()
-            );
-
-            recipe.addIngredient(
-                    ingredient,
-                    item.quantity(),
-                    item.unit()
-            );
-        }
+        updateIngredients(recipe, request.ingredients());
 
         Recipe savedRecipe = recipeRepository.saveAndFlush(recipe);
         return toResponse(savedRecipe);
     }
 
-    private void validateIngredientNames(CreateRecipeRequest request) {
+    @Transactional
+    public RecipeResponse updateRecipe(
+            Long id,
+            RecipeRequest request
+    ) {
+        Recipe recipe = findRecipe(id);
+
+        validateIngredientNames(request);
+
+        recipe.updateDetails(
+                request.title().strip(),
+                request.instructions().strip(),
+                request.prepTimeMinutes(),
+                request.servings()
+        );
+
+        updateIngredients(recipe, request.ingredients());
+
+        recipeRepository.flush();
+
+        return toResponse(recipe);
+    }
+
+    private Recipe findRecipe(Long id) {
+        return recipeRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Rezept nicht gefunden."
+                ));
+    }
+
+    private void updateIngredients(
+            Recipe recipe,
+            List<RecipeIngredientRequest> requests
+    ) {
+        Map<Long, RecipeIngredient> existingIngredients = new HashMap<>();
+
+        for (RecipeIngredient item : recipe.getIngredients()) {
+            existingIngredients.put(
+                    item.getIngredient().getId(),
+                    item
+            );
+        }
+
+        List<RecipeIngredient> updatedIngredients = new ArrayList<>();
+
+        for (RecipeIngredientRequest request : requests) {
+            Ingredient ingredient = findOrCreateIngredient(
+                    request.ingredientName()
+            );
+
+            RecipeIngredient item = existingIngredients.get(
+                    ingredient.getId()
+            );
+
+            if (item == null) {
+                item = new RecipeIngredient(
+                        recipe,
+                        ingredient,
+                        request.quantity(),
+                        request.unit()
+                );
+            } else {
+                item.updateAmount(
+                        request.quantity(),
+                        request.unit()
+                );
+            }
+
+            updatedIngredients.add(item);
+        }
+
+        recipe.replaceIngredients(updatedIngredients);
+    }
+
+    private void validateIngredientNames(RecipeRequest request) {
         Set<String> names = new HashSet<>();
 
-        for (CreateRecipeIngredientRequest item : request.ingredients()) {
+        for (RecipeIngredientRequest item : request.ingredients()) {
             String normalizedName = normalizeIngredientName(
                     item.ingredientName()
             );

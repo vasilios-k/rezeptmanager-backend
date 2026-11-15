@@ -10,7 +10,6 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -57,14 +56,23 @@ public class Recipe {
         this.servings = servings;
     }
 
-    public void addIngredient(
-            Ingredient ingredient,
-            BigDecimal quantity,
-            Unit unit
+    public void updateDetails(
+            String title,
+            String instructions,
+            int prepTimeMinutes,
+            int servings
     ) {
-        ingredients.add(
-                new RecipeIngredient(this, ingredient, quantity, unit)
-        );
+        this.title = title;
+        this.instructions = instructions;
+        this.prepTimeMinutes = prepTimeMinutes;
+        this.servings = servings;
+    }
+
+    public void replaceIngredients(
+            List<RecipeIngredient> updatedIngredients
+    ) {
+        ingredients.clear();
+        ingredients.addAll(updatedIngredients);
     }
 
     public Long getId() {
