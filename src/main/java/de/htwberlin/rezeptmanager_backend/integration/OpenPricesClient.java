@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 
 @Component
 public class OpenPricesClient {
+
     private static final Logger log =
             LoggerFactory.getLogger(OpenPricesClient.class);
 
@@ -132,7 +133,8 @@ public class OpenPricesClient {
             @JsonProperty("product_name") String name,
             String brands,
             @JsonProperty("product_quantity") BigDecimal quantity,
-            @JsonProperty("product_quantity_unit") String unit
+            @JsonProperty("product_quantity_unit") String unit,
+            @JsonProperty("quantity") String packageLabel
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)

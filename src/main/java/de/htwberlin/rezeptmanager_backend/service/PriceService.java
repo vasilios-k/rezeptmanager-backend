@@ -19,9 +19,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class PriceService {
+    private static final Pattern PIECE_LABEL = Pattern.compile(
+            "^\\s*([0-9]{1,10})\\s*(?:stück(?:e)?|stueck(?:e)?|stk\\.?|st\\.?|pcs?\\.?|pieces?|eggs?|eier|ei|stuks?)\\s*$",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CHARACTER_CLASS
+    );
+
     private final OpenPricesClient client;
     private final Map<SearchKey, CachedSearch> cache = new LinkedHashMap<>();
 
@@ -166,7 +173,7 @@ public class PriceService {
             return null;
         }
 
-        Pack pack = pack(price.product());
+        Pack pack = pack(price.product(), unit);
 
         if (pack == null
                 || pack.unit() != unit
@@ -226,11 +233,46 @@ public class PriceService {
             OpenPricesClient.Product product,
             Unit unit
     ) {
-        Pack pack = pack(product);
+        Pack pack = pack(product, unit);
         return pack != null && pack.unit() == unit;
     }
 
-    private Pack pack(OpenPricesClient.Product product) {
+    private Pack pack(
+            OpenPricesClient.Product product,
+            Unit requestedUnit
+    ) {
+        Pack structured = structuredPack(product);
+
+        if (requestedUnit != Unit.PIECE
+                || product.packageLabel() == null) {
+            return structured;
+        }
+
+        Matcher matcher = PIECE_LABEL.matcher(product.packageLabel());
+
+        if (!matcher.matches()) {
+            return structured;
+        }
+
+        BigDecimal count = new BigDecimal(matcher.group(1));
+
+        if (count.signum() <= 0
+                || count.compareTo(
+                BigDecimal.valueOf(1_000_000_000)
+        ) > 0) {
+            return null;
+        }
+
+        if (structured != null
+                && structured.unit() == Unit.PIECE
+                && structured.quantity().compareTo(count) != 0) {
+            return null;
+        }
+
+        return new Pack(count, Unit.PIECE);
+    }
+
+    private Pack structuredPack(OpenPricesClient.Product product) {
         if (product.quantity() == null
                 || product.quantity().signum() <= 0
                 || product.unit() == null) {

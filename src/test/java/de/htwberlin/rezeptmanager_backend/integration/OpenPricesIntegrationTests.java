@@ -40,6 +40,7 @@ class OpenPricesIntegrationTests {
                 .baseUrl("https://prices.example.test/api/v1");
 
         server = MockRestServiceServer.bindTo(builder).build();
+
         service = new PriceService(
                 new OpenPricesClient(builder.build())
         );
@@ -87,7 +88,9 @@ class OpenPricesIntegrationTests {
         assertEquals(129, offer.priceCents());
         assertEquals(
                 0,
-                new BigDecimal("1000").compareTo(offer.packageQuantity())
+                new BigDecimal("1000").compareTo(
+                        offer.packageQuantity()
+                )
         );
         assertEquals(Unit.GRAM, offer.packageUnit());
         assertEquals("Testmarkt", offer.shop());
@@ -188,11 +191,13 @@ class OpenPricesIntegrationTests {
         expectProducts(product(1, "1", "unknown"));
 
         assertTrue(
-                service.search("Mehl", Unit.GRAM, 1).offers().isEmpty()
+                service.search("Mehl", Unit.GRAM, 1)
+                        .offers().isEmpty()
         );
 
         assertTrue(
-                service.search("Salz", Unit.TEASPOON, 1).offers().isEmpty()
+                service.search("Salz", Unit.TEASPOON, 1)
+                        .offers().isEmpty()
         );
     }
 
@@ -240,7 +245,11 @@ class OpenPricesIntegrationTests {
                 HttpStatus.BAD_GATEWAY,
                 assertThrows(
                         ResponseStatusException.class,
-                        () -> service.search("Milch", Unit.MILLILITER, 1)
+                        () -> service.search(
+                                "Milch",
+                                Unit.MILLILITER,
+                                1
+                        )
                 ).getStatusCode()
         );
     }
@@ -289,7 +298,11 @@ class OpenPricesIntegrationTests {
                 ));
     }
 
-    private String product(long id, String quantity, String unit) {
+    private String product(
+            long id,
+            String quantity,
+            String unit
+    ) {
         return """
                 {"id":%d,"source":"off","product_name":"Mehl","brands":"Testmarke",
                  "product_quantity":%s,"product_quantity_unit":"%s","unused_field":true}
@@ -311,7 +324,13 @@ class OpenPricesIntegrationTests {
                  "location":{"id":12,"osm_name":"Testmarkt","osm_address_city":"Berlin","osm_address_country_code":"%s"},
                  "price":%s,"currency":"%s","date":"%s","price_is_discounted":%s,"price_per":%s}
                 """.formatted(
-                id, product, country, amount, currency, date, discounted,
+                id,
+                product,
+                country,
+                amount,
+                currency,
+                date,
+                discounted,
                 pricePer == null ? "null" : "\"" + pricePer + "\""
         );
     }
