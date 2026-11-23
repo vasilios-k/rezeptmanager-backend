@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
@@ -14,12 +15,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "recipes")
+@Table(
+        name = "recipes",
+        indexes = @Index(
+                name = "idx_recipes_owner_id",
+                columnList = "owner_subject,id"
+        )
+)
 public class Recipe {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "owner_subject", length = 255)
+    private String ownerSubject;
 
     @Column(nullable = false, length = 200)
     private String title;
@@ -68,6 +78,19 @@ public class Recipe {
         this.servings = servings;
     }
 
+    public void assignOwner(String ownerSubject) {
+        if (ownerSubject == null || ownerSubject.isBlank()
+                || ownerSubject.length() > 255) {
+            throw new IllegalArgumentException("Ungültige Benutzerkennung.");
+        }
+
+        if (this.ownerSubject != null) {
+            throw new IllegalStateException("Das Rezept hat bereits einen Besitzer.");
+        }
+
+        this.ownerSubject = ownerSubject;
+    }
+
     public void replaceIngredients(
             List<RecipeIngredient> updatedIngredients
     ) {
@@ -77,6 +100,10 @@ public class Recipe {
 
     public Long getId() {
         return id;
+    }
+
+    public String getOwnerSubject() {
+        return ownerSubject;
     }
 
     public String getTitle() {

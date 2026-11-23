@@ -10,6 +10,7 @@ import de.htwberlin.rezeptmanager_backend.model.Recipe;
 import de.htwberlin.rezeptmanager_backend.model.RecipeIngredient;
 import de.htwberlin.rezeptmanager_backend.repository.IngredientRepository;
 import de.htwberlin.rezeptmanager_backend.repository.RecipeRepository;
+import de.htwberlin.rezeptmanager_backend.security.CurrentUser;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,18 +29,21 @@ public class RecipeService {
 
     private final RecipeRepository recipeRepository;
     private final IngredientRepository ingredientRepository;
+    private final CurrentUser currentUser;
 
     public RecipeService(
             RecipeRepository recipeRepository,
-            IngredientRepository ingredientRepository
+            IngredientRepository ingredientRepository,
+            CurrentUser currentUser
     ) {
         this.recipeRepository = recipeRepository;
         this.ingredientRepository = ingredientRepository;
+        this.currentUser = currentUser;
     }
 
     @Transactional(readOnly = true)
     public List<RecipeResponse> getRecipes() {
-        return recipeRepository.findAllByOrderByIdAsc()
+        return recipeRepository.findAllByOwnerSubjectOrderByIdAsc(currentUser.subject())
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -52,6 +56,7 @@ public class RecipeService {
 
     @Transactional
     public RecipeResponse createRecipe(RecipeRequest request) {
+        String ownerSubject = currentUser.subject();
         validateIngredientNames(request);
 
         Recipe recipe = new Recipe(
@@ -60,6 +65,8 @@ public class RecipeService {
                 request.prepTimeMinutes(),
                 request.servings()
         );
+
+        recipe.assignOwner(ownerSubject);
 
         updateIngredients(recipe, request.ingredients());
 
@@ -99,7 +106,7 @@ public class RecipeService {
     }
 
     private Recipe findRecipe(Long id) {
-        return recipeRepository.findById(id)
+        return recipeRepository.findByIdAndOwnerSubject(id, currentUser.subject())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Rezept nicht gefunden."
