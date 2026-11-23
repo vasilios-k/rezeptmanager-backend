@@ -5,7 +5,7 @@
 REST-Backend für eine persönliche Rezeptsammlung.
 Das Projekt wird als Einzelprojekt im Modul Web-Technologien umgesetzt.
 
-Das Backend speichert Rezepte in PostgreSQL, prüft die Zugehörigkeit
+Das Backend speichert Rezepte und persönliche Einkaufslisten in PostgreSQL, prüft die Zugehörigkeit
 zum angemeldeten Benutzer und stellt eine Anbindung an die externe
 Preisdatenquelle Open Prices bereit.
 
@@ -39,6 +39,7 @@ Preisdatenquelle Open Prices bereit.
 | `Ingredient` | Wiederverwendbare Zutat mit Name und normalisiertem Suchnamen |
 | `RecipeIngredient` | Verbindung zwischen Rezept und Zutat mit rezeptbezogener Menge und Einheit |
 | `Unit` | Unterstützte Maßeinheiten als Enum |
+| `SavedShoppingList` | Private Rezeptauswahl, Einkaufshäkchen, Preise und Vorräte mit Versionsnummer |
 
 Eine Zutat wie Mehl kann von mehreren Rezepten verwendet werden.
 Die jeweilige Menge steht an der Verbindung `RecipeIngredient`.
@@ -79,6 +80,8 @@ https://rezeptmanager-backend.onrender.com
 | PUT | `/api/recipes/{id}` | Eigenes Rezept aktualisieren | 200 | Erforderlich |
 | DELETE | `/api/recipes/{id}` | Eigenes Rezept löschen | 204 | Erforderlich |
 | GET | `/api/prices` | Produktpreise suchen | 200 | Erforderlich |
+| GET | `/api/shopping-list` | Eigene gespeicherte Einkaufsliste laden | 200 | Erforderlich |
+| PUT | `/api/shopping-list` | Eigene Einkaufsliste versionsgesichert speichern | 200 | Erforderlich |
 
 Geschützte Anfragen benötigen diesen Header:
 
@@ -96,6 +99,8 @@ Wichtige Fehlerantworten:
 | 400 | Ungültige Anfrage oder Eingabedaten |
 | 401 | Fehlendes, ungültiges oder abgelaufenes Zugriffstoken |
 | 404 | Rezept nicht vorhanden oder nicht dem angemeldeten Benutzer zugeordnet |
+| 409 | Die Einkaufsliste wurde seit dem letzten Laden auf einem anderen Gerät geändert |
+| 413 | Die Einkaufsliste überschreitet die zulässige Größe |
 | 502 | Ungültige Antwort des externen Preisdienstes |
 | 503 | Externer Preisdienst vorübergehend nicht erreichbar |
 
@@ -146,6 +151,41 @@ Seitennummern von 1 bis 100.
 
 Berücksichtigt werden passende, erfasste Normalpreise aus Deutschland
 in Euro. Produkt, Packungsgröße, Händler und Datum werden zurückgegeben.
+
+### Einkaufsliste zwischen Geräten synchronisieren
+
+`GET /api/shopping-list` liefert die Versionsnummer und den privaten
+Listenstand. Vor der ersten Speicherung ist `version` gleich `null`:
+
+```json
+{
+  "version": null,
+  "data": {
+    "selections": [],
+    "checkedKeys": [],
+    "prices": {},
+    "pantry": {}
+  }
+}
+```
+
+`PUT /api/shopping-list` erwartet dieselbe Struktur mit der zuletzt gelesenen
+Version. Die Antwort enthält den gespeicherten Stand und seine aktuelle
+Version. Bei HTTP 409 muss zuerst neu gelesen werden. Das Frontend führt
+die noch ausstehenden lokalen Änderungen anschließend mit dem aktuellen
+Serverstand zusammen und versucht die Speicherung erneut.
+
+Die Besitzerkennung kommt ausschließlich aus dem geprüften Zugriffstoken.
+JPA `@Version` verhindert auch bei parallelen Anfragen das Überschreiben
+mit einer veralteten Version. Unbekannte, gelöschte und fremde Rezept-IDs
+werden aus der Auswahl entfernt. Die ursprüngliche Portionszahl bildet
+die Untergrenze; veränderte Mengen setzen alte Häkchen zurück.
+
+Listen und Preisangaben werden über verschachtelte Bean-Validation-Regeln
+geprüft, einschließlich Größenbegrenzungen, Einheiten, EUR und Preisdatum.
+Die Tabelle `shopping_lists` wird wie die vorhandenen Tabellen über die
+bestehende Hibernate-Konfiguration angelegt. Vorhandene Rezepttabellen
+und Rezeptdaten werden dafür nicht ersetzt.
 
 ## Eingabevalidierung
 
@@ -286,7 +326,7 @@ Unter Linux oder macOS:
 bash ./gradlew clean build
 ```
 
-Die Testsuite umfasst 33 Tests.
+Die Testsuite umfasst 46 Tests.
 
 Die Datenbanktests verwenden das Profil `test` mit einer H2-Datenbank
 im PostgreSQL-Modus. Antworten des externen Preisdienstes werden in
@@ -304,6 +344,9 @@ Geprüft werden unter anderem:
 - CORS-Anfragen und öffentlicher Healthcheck
 - Verarbeitung und Filterung externer Preisdaten
 - Stückangaben bei Produktpackungen
+- Geräteübergreifende Speicherung und private Einkaufslisten pro Konto
+- Eingabevalidierung und automatische Bereinigung veralteter Rezeptauswahlen
+- Versionskonflikte und tatsächlich parallel ausgeführte Schreibanfragen
 
 Der HTML-Testbericht wird unter
 `build/reports/tests/test/index.html` erzeugt.
